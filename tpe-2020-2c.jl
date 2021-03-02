@@ -285,12 +285,6 @@ md"""
 **La PSD, ``S_{XX}``, la puede estimar como ``S_{X X}(\omega) = 1/T |X(\omega)|^2``, donde ``T`` es la duración del segmento temporal que usa para la estimación, o mejor aún, dividiendo al audio en segmentos, realizando la estimación anterior con cada uno, y finalmente promediándolas.**
 """
 
-# ╔═╡ d04a2f3a-796f-11eb-21ff-c9b593d9f912
-ceil(55135/300)
-
-# ╔═╡ f02842f6-796f-11eb-09f8-3f7f990cf4ae
-(55135 + 300 - 55135 % 300)/300
-
 # ╔═╡ 50c411a8-7088-11eb-0a9d-2fe52da17a2a
 function getpsd(x, rate)
 	xrated = [x[i:i+rate-1] for i in 1:rate:length(x)]
@@ -306,11 +300,16 @@ psd = getpsd(pinkMono, 300)
 
 # ╔═╡ 7d3d6748-7088-11eb-12c6-070b01843e4b
 plot(
-	1:length(psd),
+	range(0; stop=sr/2, length=length(psd)),
 	psd;
 	xlabel="Frecuencia (Hz)",
 	ylabel = "PSD (dB)"
 )
+
+# ╔═╡ dc717174-7ad7-11eb-3f8a-97a269483324
+md"""
+Como se observa, la frecuencias mas bajas tienen mayor potencia.
+"""
 
 # ╔═╡ b60ae59e-3e67-11eb-123e-11c0cba7d09e
 md"""
@@ -321,11 +320,12 @@ md"""
 
 # ╔═╡ 8bce8660-794e-11eb-0748-c97c77e90cba
 md"""
-La ventana de hamming tiene lobulos laterales significativamente menores respecto a los lobulos laterales de la ventana rectangular. 
+La ventana de hamming tiene lobulos laterales significativamente menores respecto a los lobulos laterales de la ventana rectangular, aunque el lobulo principal es aproximadamente el doble que la de la ventana rectangular.
+Al tener lobulos laterales mas grandes, tendremos una mayor amplificacion en las frecuencias. Esto provoca que en el espectograma se muestren frecuencias que no correspondan.  
 """
 
 # ╔═╡ 8d25b3bc-713d-11eb-19e5-e50944c500c0
-let
+begin
 	samples = 20
 	toDb(x) = 20log10(x) 
 	
@@ -343,9 +343,11 @@ let
 		range(-pi; stop=pi, length=length(vRecLog)),
 		vRecLog;
 		xlabel="Ω",
+		ylabel="dB",
 		xlimit= (0, pi),
 		ylimit= (-50, 30),
-		label= "Rectangular"
+		label= "Rectangular",
+		title="Espectro"
 	)
 	plot!(
 		range(-pi; stop=pi, length=length(vHammingLog)),
@@ -356,14 +358,52 @@ let
 	)
 end
 
+# ╔═╡ 4aa62c04-7ae0-11eb-00e2-cd199c6cc45a
+let
+	plot(
+		range(-sr/2; stop=sr/2, length=length(vRecLog)),
+		vRecLog;
+		xlabel="Frecuencia [Hz]",
+		ylabel="dB",
+		xlimit= (0, sr/2),
+		ylimit= (-50, 30),
+		label= "Rectangular",
+		title= "Equivalencia en frecuencia"
+	)
+	plot!(
+		range(-sr/2; stop=sr/2, length=length(vHammingLog)),
+		vHammingLog;
+		xlabel="Frecuencia [Hz]",
+		xlimit= (0, sr/2),
+		label= "Hamming"
+	)
+end
+
+# ╔═╡ f16081a6-7abe-11eb-3ae5-c5af181dc83e
+md"""
+Observando los gráficos, podemos notar que el lóbulo principal de la ventana rectangular tiene una resolución de aproximadamente 2.5 KHz y la de la ventana de hamming 5KHz
+"""
+
 # ╔═╡ b2025250-3e67-11eb-39a2-73292bbf17c9
 md"""
 #### Ejercicio 4)
 **Implemente un sistema para reducir la frecuencia de muestreo del audio, de 44100 Hz a 5512.5 Hz. Muestre un diagrama en bloques y justifique su diseño. Diseñe el filtro pasabajos mediante el método de ventaneo explicando y justificando las decisiones, de forma tal que su retardo sea menor a 1 ms. Graficar un diagrama de polos y ceros, respuesta en frecuencia (módulo y fase), respuesta al impulso, y retardo de grupo.**
 """
 
-# ╔═╡ 784da18a-794b-11eb-0186-1b2f7983377f
+# ╔═╡ 8135a7d8-7aac-11eb-13fb-3977a7f4ceff
 md"""
+Para reducir la frecuencia de muestreo debemos pasar la señal por un filtro pasa bajos y luego decimar.
+
+![filtro y decimacion.png](https://github.com/rinaldia92/sys-tpe/blob/master/filtro%20y%20decimacion.png?raw=true)
+
+Como debemos reducirlo a un tamaño 8 veces menor utilizaremos una frecuencia de corte equivalente a sr/8 y N = 8.
+
+Pero el filtro ideal no tiene soporte acotado, por lo cual debemos recortarlo utilizando el metodo de ventaneo.
+
+![filtro soporte acotado.png](https://github.com/rinaldia92/sys-tpe/blob/master/filtro%20soporte%20acotado.png?raw=true)
+
+Si bien ahora tenemos un soporte acotado, debemos realizar un desplazamiento a la derecha de la respuesta al impulso para que el sistema sea causal, pero esto nos genera un desfasaje lineal y un retardo de grupo.
+
 Para calcular el retardo de grupo debo analizar la cantidad de muestras por segundo que hay en las canciones, dado que la frecuencia de muestreo es de 44100Hz sabemos que hay 44100 muestras por segundo (44.1 muestras cada milisegundo).
 Al aplicar el metodo de ventaneo tenemos un sistema que no es causal, por lo cual debemos realizar un desplazamiento para convertirlo en causal y esto genera un delay equivalente a (N - 1) / 2, siendo N el orden del filtro. Dado que queremos un delay menor a 1 ms tenemos que cumplir con que (N - 1)/2 < 44.1 dando N < 89.2 (N natural). Se eligio N = 81
 """
@@ -380,6 +420,11 @@ begin
 	subRate(x) = [x[8*i + 1] for i in 0:Int(round(length(x)/8))-1]
 end;
 
+# ╔═╡ 9087df4c-7ad6-11eb-1a95-db70cdcb1640
+md"""
+###### Mostramos el efecto de filtrar usando usando una ventana rectangular y luego submuestrear.
+"""
+
 # ╔═╡ 8c48e750-70a4-11eb-269e-939ec902c471
 pinkMonoFiltRec = conv(pinkMono,h_rec)
 
@@ -388,6 +433,11 @@ pinkSubratedRec = subRate(pinkMonoFiltRec)
 
 # ╔═╡ 4c56bc6c-3ea4-11eb-01e7-7b26c1d054f0
 SampleBuf(pinkSubratedRec, sr/8)
+
+# ╔═╡ b79f83f0-7ad6-11eb-0da6-87aa0eb4dff8
+md"""
+###### Mostramos el efecto de filtrar usando usando una ventana de hamming y luego submuestrear.
+"""
 
 # ╔═╡ c89ab634-70ba-11eb-36f8-0526c0bd45d9
 pinkMonoFiltHamming = conv(pinkMono,h_hamming)
@@ -398,8 +448,13 @@ pinkSubratedHamming = subRate(pinkMonoFiltHamming)
 # ╔═╡ 73ed9db0-70c3-11eb-0eee-71f0507bc207
 SampleBuf(pinkSubratedHamming, sr/8)
 
+# ╔═╡ becc85f6-7ad6-11eb-0dff-8d9c85c17965
+md"""
+###### Graficos correspondientes al filtro usando ventana de hamming.
+"""
+
 # ╔═╡ 841b1cb4-70c3-11eb-395b-0d24a544a58b
-stem(h_hamming)
+stem(h_hamming; xlabel="n", title= "Respuesta al impulso")
 
 # ╔═╡ e6c7024a-7944-11eb-0b80-f14b78567e66
 function groupDelay(x,y)
@@ -407,7 +462,7 @@ function groupDelay(x,y)
 	for  i in 1:length(x)-1
 		z[i] = (y[i+1] - y[i])/(x[i+1]-x[i])
 	end
-	return z
+	return z .* -1
 end
 
 # ╔═╡ 58a04e18-7944-11eb-0912-6951ee323eef
@@ -419,31 +474,62 @@ begin
 end
 	
 
+# ╔═╡ 4186458e-7ab6-11eb-157c-b3896fcddbb5
+md"""
+Aca observamos el modulo de la respuesta en frecuencia. Se nota que la forma es muy similar al filtro ideal.
+"""
+
 # ╔═╡ 8fc53be4-70c3-11eb-274c-5d427b8aece0
 plot(
 	plotRange,
 	plotAbs;
-	xlims = (0,pi)
+	xlabel="Ω",
+	xlims = (0,pi),
+	legend=false,
+	title="Modulo"
 )
+
+# ╔═╡ a2e71ffc-7ad3-11eb-12ee-e35a5d5b633a
+md"""
+En el gráfico de la fase, en sector entre 0 y pi/8, vemos que esta es lineal, lo cual se corresponde con el desfasaje que se le aplico al filtro ideal. El desplazamiento fue de 40 puntos a la derecha, por lo cual se espera que haya una pendiente de 40 lo cual se observa en el gráfico.
+"""
 
 # ╔═╡ 09d9b998-7603-11eb-2b46-a74dad9d0bc0
 plot(
 	plotRange,
 	plotPhase;
-	xlims = (0,pi)
+	xlabel="Ω",
+	xlims = (0,pi),
+	legend=false,
+	title= "Fase"
 )
 
 # ╔═╡ 27ff4ee8-7945-11eb-0887-493ca41e602c
 plot(
 	plotRange[1:length(plotRange)-1],
 	plotDelay;
-	xlims = (0,pi)
+	xlabel="Ω",
+	xlims = (0,pi),
+	legend=false,
+	title= "Retardo de grupo"
 )
+
+# ╔═╡ 026f30e6-7ab0-11eb-1e8e-c1d26da0bc1a
+md"""
+En el siguiente diagrama de Polos y Ceros observamos que tenemos polos en el origen y ceros sobre el origen y sobre el circulo unitario, a excepcion de la zona correspondiete a ω chicas. Esto tiene sentido ya que un filtro FIR si tiene polos los tiene en el origen y/o infinito y estamos realizando un filtro pasabajos por los cuales las bajas frecuencias deben pasar.
+
+Por las características del filtro, se esperan tener 80 polos en cero y como la fase es lineal se esperan que los ceros sean 80, siendo pares conjugados. En este caso, tenemos 79 ya que el cero ubicado en el origen es doble.
+"""
 
 # ╔═╡ 047e53b2-70c4-11eb-090a-7bb200921492
 let pr = polynomialratio(h_hamming, [1])
 	zplane(getzeros(pr), getpoles(pr))
 end
+
+# ╔═╡ e7a268d6-7ab5-11eb-2cec-87ddc4950d37
+md"""
+Aca comparamos las PSD correspondientes a la señal original y la señal filtrada, como se observa, en las frecuencias bajas ambas señales tienen la misma potencia, pero llegado a un punto, la potencia de las frecuencias mas altas decae abruptamente en la señal filtrada con respecto a la original, lo cual tiene sentido ya que estabamos filtrando con un pasabajos.
+"""
 
 # ╔═╡ 014112be-70c6-11eb-1b88-dfa9b073f542
 psdFiltered = getpsd(pinkMonoFiltHamming[1:length(pinkMono)], 300)
@@ -451,13 +537,13 @@ psdFiltered = getpsd(pinkMonoFiltHamming[1:length(pinkMono)], 300)
 # ╔═╡ 5f21cdf2-796f-11eb-2a52-d33158a3f251
 let
 	plot(
-		1:length(psd),
+		range(0; stop=sr/2, length=length(psd)),
 		psd;
 		xlabel="Frecuencia (Hz)",
 		ylabel = "PSD (dB)"
 	)
 	plot!(
-		1:length(psdFiltered),
+		range(0; stop=sr/2, length=length(psd)),
 		psdFiltered;
 		xlabel="Frecuencia (Hz)",
 		ylabel = "PSD (dB)"
@@ -503,23 +589,50 @@ Los parámetros con los que se realice el espectrograma tienen una influencia di
 **Realice un espectrograma de la señal sub-muestreada y muestre una imagen (con zoom) de alguna región donde se vean las características espectrales de la señal dada la ventana utilizada. Muestre y justifique cómo cambia la visualización de las características con 3 diferentes longitudes de ventana y comente qué longitud utilizará en el algoritmo. Realice las comparaciones con ventana rectangular y de Hamming.**
 """
 
+# ╔═╡ fab10476-7abf-11eb-2d87-3f393cde1685
+md"""
+###### Espectogramas con ventana de hamming de 512, 1024 y 2048 puntos, con un solapamiento del 90%.
+"""
+
 # ╔═╡ 7fcc10bc-797b-11eb-321e-0736a8844282
-specplot(pinkSubratedHamming; fs=sr/8, overlap=0.9, window = hamming(512), ylims=(0, 1e3), xlims=(3,5))
+specplot(pinkSubratedHamming; fs=sr/8, overlap=0.9, window = hamming(512), ylims=(0, 1e3), xlims=(3,5), title= "Hamming 512")
 
 # ╔═╡ 39f5fc86-3ea4-11eb-37f3-25feb7d2aee6
-specplot(pinkSubratedHamming; fs=sr/8, overlap=0.9, window = hamming(1024),ylims=(0, 1e3), xlims=(3,5))
+specplot(pinkSubratedHamming; fs=sr/8, overlap=0.9, window = hamming(1024),ylims=(0, 1e3), xlims=(3,5), title= "Hamming 1024")
 
 # ╔═╡ 798ef802-7149-11eb-2fd4-672a67b4fce1
-specplot(pinkSubratedHamming; fs=sr/8, overlap=0.9, window = hamming(2048),ylims=(0, 1e3), xlims=(3,5))
+specplot(pinkSubratedHamming; fs=sr/8, overlap=0.9, window = hamming(2048),ylims=(0, 1e3), xlims=(3,5), title= "Hamming 2048")
+
+# ╔═╡ 2e530b82-7ac0-11eb-1e46-ed970d25b507
+md"""
+###### Espectogramas con ventana rectangular de 512, 1024 y 2048 puntos, con un solapamiento del 90%.
+"""
 
 # ╔═╡ 8b254136-797b-11eb-222c-572bbd32e034
-specplot(pinkSubratedRec; fs=sr/8, overlap=0.9, window = ones(512), ylims=(0, 1e3), xlims=(3,5))
+specplot(pinkSubratedRec; fs=sr/8, overlap=0.9, window = ones(512), ylims=(0, 1e3), xlims=(3,5), title= "Rectangular 512")
 
 # ╔═╡ 9337a2da-7942-11eb-1c8b-0d572ed4d139
-specplot(pinkSubratedRec; fs=sr/8, overlap=0.9, window = ones(1024),ylims=(0, 1e3), xlims=(3,5))
+specplot(pinkSubratedRec; fs=sr/8, overlap=0.9, window = ones(1024),ylims=(0, 1e3), xlims=(3,5), title= "Rectangular 1024")
 
 # ╔═╡ 98469fe2-7942-11eb-1125-fb9dcda326c6
-specplot(pinkSubratedRec; fs=sr/8, overlap=0.9, window = ones(2048), ylims=(0, 1e3), xlims=(3,5))
+specplot(pinkSubratedRec; fs=sr/8, overlap=0.9, window = ones(2048), ylims=(0, 1e3), xlims=(3,5), title= "Rectangular 2048")
+
+# ╔═╡ 3a9fd2e4-7ac0-11eb-3aa7-aba357ba7797
+md"""
+A simple vista, si comparamos los espectogramas correspondientes a la ventanas de 512 puntos podemos notar que en el espectograma que utiliza la ventana de hamming las frecuencias se encuentran bastante mas diferenciadas con respecto a la que utilizar la ventana rectangular.
+
+Por otro lado, al utilizar una ventana mas grande se podrá visualizar de mejor manera el contenido en frecuencias perdiendo resolucion temporal, mientras que, cuanto mas chica es, mejora la resolucion temporal perdiendo resolucion espectral.
+
+En el caso de la ventana de 2048 vemos que hay mucho solapamiento en las bandas de tiempo. Por lo cual nos conviene ver el espectograma con un rango mas grande en el tiempo.
+"""
+
+# ╔═╡ dfd795fa-7acd-11eb-398e-fbd55823326d
+specplot(pinkSubratedHamming; fs=sr/8, overlap=0.9, window = hamming(2048),ylims=(0, 1e3), xlims=(1,9), title= "Hamming 2048")
+
+# ╔═╡ 6a71b2d4-7ace-11eb-36a3-c9910278b1ff
+md"""
+Dado que a mayor ventana hay mayor resolución espectral y dado que en la comparación entre las ventanas de hamming y rectangular tenia mejor resolución la de hamming, se optó por utilizar una ventana de hamming de 2048 puntos para el algoritmo.
+"""
 
 # ╔═╡ 9309e284-3e67-11eb-1ab2-612f6c748c3b
 md"""
@@ -537,6 +650,11 @@ Debemos obtener una matriz de energías `E`, cuyas columnas, al igual que las de
 
 **Divida al espectrograma en 21 bandas de frecuencias, equiespaciadas en escala logarítmica (es decir, el cociente entre frecuencias de bandas consecutivas debe ser constante). La frecuencia inferior de la primera banda debe ser 300 Hz y la superior de la última, 2 kHz.** 
 	"""
+
+# ╔═╡ e5cdf836-7add-11eb-0fc9-0ff239e2a7ef
+md"""
+###### Calculo de S
+"""
 
 # ╔═╡ 80498c84-74cd-11eb-3988-812f11a04268
 function calcS(x; window = hamming(1000), ov = 0.5)
@@ -557,6 +675,11 @@ end
 
 # ╔═╡ 790fcb16-77cc-11eb-2d6e-fbd70848cd76
 S
+
+# ╔═╡ f3e07a98-7add-11eb-35bd-0d5d06f25857
+md"""
+###### Calculo de E
+"""
 
 # ╔═╡ c632d7ec-74a9-11eb-1133-3f64303d3fbd
 function calcE(S, bands, freq)
@@ -600,6 +723,11 @@ En palabras, $H[m, n]$ es 1 si la diferencia de energía entre las bandas $m$ y 
 #### Ejercicio 8)
 
 **Implemente el algoritmo de extracción de características, calculando la huella. Debido al efecto borde, $H[m, n]$ debería resultar una matriz de 20 filas. Ejecute el algoritmo sobre un segmento de audio y muestre una imagen de la huella digital acústica obtenida.**
+"""
+
+# ╔═╡ 0385cce6-7ade-11eb-37c7-25a1ea2b936a
+md"""
+###### Calculo de H
 """
 
 # ╔═╡ 6476e9fc-3ea4-11eb-3873-b765108f4bab
@@ -715,8 +843,15 @@ md"""
 **Observe que la cantidad de elementos a guardar en la base de datos se incrementa conforme la longitud de las ventanas del espectrograma inicial disminuye, o el solapamiento entre ventanas se incrementa. Determine el solapamiento entre ventanas del espectrograma para obtener una densidad de aproximadamente 25 elementos por segundo y utilice este valor para el ejercicio siguiente.**
 """
 
+# ╔═╡ 622dc82a-7983-11eb-2fbb-9fafc8055997
+md"""
+Para el calculo del overlap, nos basamos en la documentacion de la funcion specgram de matlab.
+"""
+
 # ╔═╡ bd10e958-7981-11eb-3b7e-0ba2cbbb344a
 md"""
+![calculo-overlap.png](https://github.com/rinaldia92/sys-tpe/blob/master/calculo-overlap.png?raw=true)
+"""
 
 # ╔═╡ 39062338-7549-11eb-0ccd-c1557057bed4
 function calcOverlap(x, fps, window)
@@ -730,6 +865,11 @@ end
 
 # ╔═╡ 98bbe152-797f-11eb-1d45-7d9702995a94
 calcOverlap(pinkSubratedHamming, 25, hamming(2048))
+
+# ╔═╡ 53691f34-7ad8-11eb-2fe4-db2ec2abe6d6
+md"""
+Se redondeará y se tomará como overlap 0.9
+"""
 
 # ╔═╡ 81717fc8-3e67-11eb-05fc-5bde46597f8a
 md"""
@@ -852,6 +992,11 @@ md"""
 **Evalúe la tasa de aciertos del algoritmo identificando segmentos de duración $T$ con tiempo inicial elegido al azar de canciones elegidas al azar (vea la función `rand`). Las canciones deberán ser las mismas que utilizó para confeccionar la base de datos. Realice la evaluación para 50 segmentos con duración T  entre 5, 10 y 20 segundos cada vez (150 evaluaciones en total) obteniendo la tasa de aciertos en cada caso.**
 """
 
+# ╔═╡ 2c813b30-7ade-11eb-1f1d-1b2dbcd3a4f3
+md"""
+Funcion para testear con distintas duraciones, con posibilidad de cambiar la cantidad y agregar ruido.
+"""
+
 # ╔═╡ 92d96440-7771-11eb-0324-4bc254a0deb0
 function test(durations; cant = 50, noises = [nothing])
 	matchs = zeros(length(durations), length(noises))
@@ -873,8 +1018,18 @@ function test(durations; cant = 50, noises = [nothing])
 	return matchs
 end;
 
+# ╔═╡ 54f82180-7adb-11eb-0cac-1b127676fe0b
+md"""
+Resultados de testear 50 muestras de 5s, 10s y 20s sin ruido.
+"""
+
 # ╔═╡ ac315eac-7771-11eb-2cd9-914977facd0d
-#results = test([5,10,20])
+results = test([5,10,20])
+
+# ╔═╡ cde76dda-7adb-11eb-0908-2fc75dee872b
+md"""
+Como se observa, se obtuvo una tasa de 100% de acierto.
+"""
 
 # ╔═╡ 7229577a-3e67-11eb-0c71-f383056175d1
 md"""
@@ -883,8 +1038,20 @@ md"""
 **Repita el ejercicio 12 sumando ruido a los segmentos de audio. Utilice la función `randn` para generar las muestras de ruido. Evalúe tasa de aciertos para $SNR =0dB$, $10dB$ y $20dB$, mostrando sus resultados en una tabla para 9 combinaciones de longitud temporal y ruido. Nota: $SNR=10 log_{10}(P_X/P_N)$ donde $P_X$ es la potencia media de la señal sin ruido, y $P_N$ es la potencia media del ruido sumado a la señal. Para el cálculo de la potencia media puede utilizar la función `var`, que estima la varianza de una señal, ya que las señales de audio no deberían componente continua o valor medio.**
 """
 
+# ╔═╡ 913c05a8-7adb-11eb-32ed-d37f27705386
+md"""
+Resultados de testear 50 muestras de 5s, 10s y 20s con 0dB, 10dB y 20dB de ruido.
+
+Las filas corresponden a la duración y las columnas al ruido.
+"""
+
 # ╔═╡ cc43c0ac-7719-11eb-2086-8d17e6c2fb36
-# resultsWithNoise = test([5,10,20]; noises = [0,10,20])
+resultsWithNoise = test([5,10,20]; noises = [0,10,20])
+
+# ╔═╡ c8c5da9e-7adb-11eb-0d68-4d222154385d
+md"""
+Como se observa, se obtuvo una alta tasa de acierto incluso al haberle agregado ruido.
+"""
 
 # ╔═╡ 6d76f2f2-3e67-11eb-04dc-0580a2072dda
 md"""
@@ -962,84 +1129,107 @@ Bajo el primer criterio se declararía ganador al ID 7 dado que aparece mayor ca
 # ╠═a3bf22c4-3ea3-11eb-3d3d-adfdfc171c33
 # ╠═d132a762-3ea3-11eb-3494-692576a31f34
 # ╠═28c5ed26-3e6b-11eb-1d44-01e209b92f00
-# ╠═edf9177a-7015-11eb-0553-9512d2a99f22
+# ╟─edf9177a-7015-11eb-0553-9512d2a99f22
 # ╠═04aa1712-7016-11eb-10cc-99a4e40b5eef
 # ╠═2a80005a-7093-11eb-0d88-c5c2b7018ced
 # ╠═11802b5c-7016-11eb-1b8f-21b09c8c6137
 # ╠═21359f50-7016-11eb-2198-ff85c9920a7b
-# ╠═b9ad22ac-3e67-11eb-35e1-7f4579b64838
-# ╠═d04a2f3a-796f-11eb-21ff-c9b593d9f912
-# ╠═f02842f6-796f-11eb-09f8-3f7f990cf4ae
+# ╟─b9ad22ac-3e67-11eb-35e1-7f4579b64838
 # ╠═50c411a8-7088-11eb-0a9d-2fe52da17a2a
 # ╠═60c5245c-7088-11eb-1d2d-3f552a91ae07
 # ╠═7d3d6748-7088-11eb-12c6-070b01843e4b
+# ╟─dc717174-7ad7-11eb-3f8a-97a269483324
 # ╟─b60ae59e-3e67-11eb-123e-11c0cba7d09e
-# ╠═8bce8660-794e-11eb-0748-c97c77e90cba
+# ╟─8bce8660-794e-11eb-0748-c97c77e90cba
 # ╠═8d25b3bc-713d-11eb-19e5-e50944c500c0
+# ╠═4aa62c04-7ae0-11eb-00e2-cd199c6cc45a
+# ╟─f16081a6-7abe-11eb-3ae5-c5af181dc83e
 # ╟─b2025250-3e67-11eb-39a2-73292bbf17c9
-# ╠═784da18a-794b-11eb-0186-1b2f7983377f
+# ╠═8135a7d8-7aac-11eb-13fb-3977a7f4ceff
 # ╠═a8892f14-70b4-11eb-26ff-11bb7d0f047e
-# ╠═8c48e750-70a4-11eb-269e-939ec902c471
-# ╠═999f6532-70a4-11eb-0f3f-35b51be6777a
-# ╠═4c56bc6c-3ea4-11eb-01e7-7b26c1d054f0
-# ╠═c89ab634-70ba-11eb-36f8-0526c0bd45d9
-# ╠═67a9c698-70c3-11eb-1e95-4566df3be24c
-# ╠═73ed9db0-70c3-11eb-0eee-71f0507bc207
-# ╠═841b1cb4-70c3-11eb-395b-0d24a544a58b
-# ╠═e6c7024a-7944-11eb-0b80-f14b78567e66
-# ╠═58a04e18-7944-11eb-0912-6951ee323eef
-# ╠═8fc53be4-70c3-11eb-274c-5d427b8aece0
-# ╠═09d9b998-7603-11eb-2b46-a74dad9d0bc0
-# ╠═27ff4ee8-7945-11eb-0887-493ca41e602c
-# ╠═047e53b2-70c4-11eb-090a-7bb200921492
-# ╠═014112be-70c6-11eb-1b88-dfa9b073f542
-# ╠═5f21cdf2-796f-11eb-2a52-d33158a3f251
+# ╟─9087df4c-7ad6-11eb-1a95-db70cdcb1640
+# ╟─8c48e750-70a4-11eb-269e-939ec902c471
+# ╟─999f6532-70a4-11eb-0f3f-35b51be6777a
+# ╟─4c56bc6c-3ea4-11eb-01e7-7b26c1d054f0
+# ╟─b79f83f0-7ad6-11eb-0da6-87aa0eb4dff8
+# ╟─c89ab634-70ba-11eb-36f8-0526c0bd45d9
+# ╟─67a9c698-70c3-11eb-1e95-4566df3be24c
+# ╟─73ed9db0-70c3-11eb-0eee-71f0507bc207
+# ╟─becc85f6-7ad6-11eb-0dff-8d9c85c17965
+# ╟─841b1cb4-70c3-11eb-395b-0d24a544a58b
+# ╟─e6c7024a-7944-11eb-0b80-f14b78567e66
+# ╟─58a04e18-7944-11eb-0912-6951ee323eef
+# ╟─4186458e-7ab6-11eb-157c-b3896fcddbb5
+# ╟─8fc53be4-70c3-11eb-274c-5d427b8aece0
+# ╟─a2e71ffc-7ad3-11eb-12ee-e35a5d5b633a
+# ╟─09d9b998-7603-11eb-2b46-a74dad9d0bc0
+# ╟─27ff4ee8-7945-11eb-0887-493ca41e602c
+# ╟─026f30e6-7ab0-11eb-1e8e-c1d26da0bc1a
+# ╟─047e53b2-70c4-11eb-090a-7bb200921492
+# ╟─e7a268d6-7ab5-11eb-2cec-87ddc4950d37
+# ╟─014112be-70c6-11eb-1b88-dfa9b073f542
+# ╟─5f21cdf2-796f-11eb-2a52-d33158a3f251
 # ╟─af4f3da4-3e67-11eb-3cc6-3378e0c12667
 # ╟─1a1f970a-7978-11eb-1104-b944d4d678e5
-# ╠═6bd3e248-70c9-11eb-35d2-5930819fa625
+# ╟─6bd3e248-70c9-11eb-35d2-5930819fa625
 # ╟─43b74df2-7977-11eb-1fa1-35e602e54789
-# ╠═8e806244-70c9-11eb-26ce-3da3372d362e
+# ╟─8e806244-70c9-11eb-26ce-3da3372d362e
 # ╟─356a700c-7978-11eb-12a8-41978621f6aa
 # ╟─982538c4-3e67-11eb-229e-dd2531a540d6
-# ╠═7fcc10bc-797b-11eb-321e-0736a8844282
-# ╠═39f5fc86-3ea4-11eb-37f3-25feb7d2aee6
-# ╠═798ef802-7149-11eb-2fd4-672a67b4fce1
-# ╠═8b254136-797b-11eb-222c-572bbd32e034
-# ╠═9337a2da-7942-11eb-1c8b-0d572ed4d139
-# ╠═98469fe2-7942-11eb-1125-fb9dcda326c6
-# ╠═9309e284-3e67-11eb-1ab2-612f6c748c3b
+# ╟─fab10476-7abf-11eb-2d87-3f393cde1685
+# ╟─7fcc10bc-797b-11eb-321e-0736a8844282
+# ╟─39f5fc86-3ea4-11eb-37f3-25feb7d2aee6
+# ╟─798ef802-7149-11eb-2fd4-672a67b4fce1
+# ╟─2e530b82-7ac0-11eb-1e46-ed970d25b507
+# ╟─8b254136-797b-11eb-222c-572bbd32e034
+# ╟─9337a2da-7942-11eb-1c8b-0d572ed4d139
+# ╟─98469fe2-7942-11eb-1125-fb9dcda326c6
+# ╟─3a9fd2e4-7ac0-11eb-3aa7-aba357ba7797
+# ╟─dfd795fa-7acd-11eb-398e-fbd55823326d
+# ╟─6a71b2d4-7ace-11eb-36a3-c9910278b1ff
+# ╟─9309e284-3e67-11eb-1ab2-612f6c748c3b
+# ╟─e5cdf836-7add-11eb-0fc9-0ff239e2a7ef
 # ╠═80498c84-74cd-11eb-3988-812f11a04268
-# ╠═e0c8a45a-74cd-11eb-3502-e12a3b527240
-# ╠═790fcb16-77cc-11eb-2d6e-fbd70848cd76
+# ╟─e0c8a45a-74cd-11eb-3502-e12a3b527240
+# ╟─790fcb16-77cc-11eb-2d6e-fbd70848cd76
+# ╟─f3e07a98-7add-11eb-35bd-0d5d06f25857
 # ╠═c632d7ec-74a9-11eb-1133-3f64303d3fbd
-# ╠═07a7e9fe-74aa-11eb-08d0-e1c9faf07e9f
-# ╠═8deaf928-3e67-11eb-0327-31e0f74de814
+# ╟─07a7e9fe-74aa-11eb-08d0-e1c9faf07e9f
+# ╟─8deaf928-3e67-11eb-0327-31e0f74de814
+# ╟─0385cce6-7ade-11eb-37c7-25a1ea2b936a
 # ╠═6476e9fc-3ea4-11eb-3873-b765108f4bab
-# ╠═e600a89c-719d-11eb-0887-2325103368e2
-# ╠═04acb5a6-719e-11eb-1aba-fdebe28d983f
-# ╠═2365113c-719e-11eb-3eb7-499d250a39a5
-# ╠═89743a62-3e67-11eb-209e-9b1f3cc84e34
-# ╠═2083e654-7708-11eb-028d-c1f6a5a8e8ef
-# ╠═23dabfe4-7708-11eb-1960-536d21165c69
+# ╟─e600a89c-719d-11eb-0887-2325103368e2
+# ╟─04acb5a6-719e-11eb-1aba-fdebe28d983f
+# ╟─2365113c-719e-11eb-3eb7-499d250a39a5
+# ╟─89743a62-3e67-11eb-209e-9b1f3cc84e34
+# ╟─2083e654-7708-11eb-028d-c1f6a5a8e8ef
+# ╟─23dabfe4-7708-11eb-1960-536d21165c69
 # ╠═741304fe-3ea4-11eb-15e8-09908d98ecb3
 # ╟─855a7d2e-3e67-11eb-0f46-a5c786d5caf3
-# ╠═bd10e958-7981-11eb-3b7e-0ba2cbbb344a
+# ╟─622dc82a-7983-11eb-2fbb-9fafc8055997
+# ╟─bd10e958-7981-11eb-3b7e-0ba2cbbb344a
 # ╠═39062338-7549-11eb-0ccd-c1557057bed4
-# ╠═98bbe152-797f-11eb-1d45-7d9702995a94
+# ╟─98bbe152-797f-11eb-1d45-7d9702995a94
+# ╟─53691f34-7ad8-11eb-2fe4-db2ec2abe6d6
 # ╟─81717fc8-3e67-11eb-05fc-5bde46597f8a
-# ╠═b91537ac-3ea4-11eb-14d6-d341c535d83e
+# ╟─b91537ac-3ea4-11eb-14d6-d341c535d83e
 # ╟─73333e92-3e85-11eb-26b6-7f0309ef2ee9
 # ╟─feb5d512-3e85-11eb-0116-29e4d9539595
-# ╠═0cf7ba9c-3e74-11eb-18e2-c38aa20f9e9a
+# ╟─0cf7ba9c-3e74-11eb-18e2-c38aa20f9e9a
 # ╠═e9255b8c-3e74-11eb-2960-5d01b0c99b13
 # ╟─7c7c1424-3e67-11eb-1da0-5dbad0171b20
-# ╠═415e32e6-3e76-11eb-17fa-23bd653fb975
-# ╠═76ce23dc-3e67-11eb-0be0-91b6781840fb
+# ╟─415e32e6-3e76-11eb-17fa-23bd653fb975
+# ╟─76ce23dc-3e67-11eb-0be0-91b6781840fb
+# ╟─2c813b30-7ade-11eb-1f1d-1b2dbcd3a4f3
 # ╠═92d96440-7771-11eb-0324-4bc254a0deb0
+# ╟─54f82180-7adb-11eb-0cac-1b127676fe0b
 # ╠═ac315eac-7771-11eb-2cd9-914977facd0d
-# ╠═7229577a-3e67-11eb-0c71-f383056175d1
+# ╟─cde76dda-7adb-11eb-0908-2fc75dee872b
+# ╟─7229577a-3e67-11eb-0c71-f383056175d1
+# ╟─913c05a8-7adb-11eb-32ed-d37f27705386
 # ╠═cc43c0ac-7719-11eb-2086-8d17e6c2fb36
-# ╠═6d76f2f2-3e67-11eb-04dc-0580a2072dda
-# ╠═685698fa-3e67-11eb-2698-937dd4801b5c
-# ╠═62b03a84-3e67-11eb-3949-2dc573c7d956
+# ╟─c8c5da9e-7adb-11eb-0d68-4d222154385d
+# ╟─6d76f2f2-3e67-11eb-04dc-0580a2072dda
+# ╟─685698fa-3e67-11eb-2698-937dd4801b5c
+# ╟─62b03a84-3e67-11eb-3949-2dc573c7d956
 # ╟─562997ce-3e67-11eb-015a-d318429ed230
